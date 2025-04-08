@@ -17,21 +17,22 @@ cache:Cache cache = new ({
     cleanupInterval: 60
 });
 
-configurable string ASGARDEO_HOST = "";
+configurable string ASGARDEO_HOST = "https://api.asgardeo.io/t/verifonepvt";
 configurable string ENTITY_ID_CLAIM = "http://wso2.org/claims/entityID";
-configurable string ENTITY_SERVICE_ENDPOINT = "";
-configurable string[] WESTPAC_ENTITY_IDS = [];
-configurable string CLIENT_ID_CC_GRANT_ENTITY_SERVICE = "";
+configurable string ENTITY_SERVICE_ENDPOINT = "https://dev.portal.test-gsc.vfims.com/oidc/ds-entity-service/entities/";
+configurable string[] WESTPAC_ENTITY_IDS = ["a1b4d79b-c5ed-4573-8380-611b18e7a2f4", "52b59912-4ae7-466b-beaf-a5f92f4f3f50", "c63e1d33-88f8-4198-bb8b-c52554e0f0d3", "7cd21095-a0cb-4819-bdbf-71535652fb72"];
+configurable string CLIENT_ID_CC_GRANT_ENTITY_SERVICE = "ud2QuZWMntKhLRfVbPhDtp0PMn4a";
 configurable string CLIENT_SECRET_CC_GRANT_ENTITY_SERVICE = "";
 configurable string SCOPES_CC_GRANT_ENTITY_SERVICE = "";
 configurable string VERIFONE_DOMAIN = "verifone.com";
-configurable string MESSAGING_SERVICE_ENDPOINT = "";
+configurable string MESSAGING_SERVICE_ENDPOINT = "https://dev.portal.test-gsc.vfims.com/oidc/vfmessaging/";
 configurable string MESSAGING_SERVICE_SUB_PATH = "messages/send";
-configurable string CLIENT_ID_CC_GRANT_MESSAGING_SERVICE = "";
+configurable string CLIENT_ID_CC_GRANT_MESSAGING_SERVICE = "ud2QuZWMntKhLRfVbPhDtp0PMn4a";
 configurable string CLIENT_SECRET_CC_GRANT_MESSAGING_SERVICE = "";
 configurable string SCOPES_CC_GRANT_MESSAGING_SERVICE = "";
 configurable string FIRST_NAME_CLAIM = "http://wso2.org/claims/givenname";
 configurable string LAST_NAME_CLAIM = "http://wso2.org/claims/lastname";
+configurable string PARENT_ENTITY_ID_VALUE = "";
 
 service asgardeo:RegistrationService on webhookListener {
 
@@ -59,21 +60,27 @@ service asgardeo:RegistrationService on webhookListener {
         string emailDomain = extractDomain(userName);
         log:printInfo("Email Domain : " + emailDomain);
 
-        json responseData = retrieveEntityServiceInformation(entityID);
+        string parentEntityID = "";
+        json responseData = {};
+        string federationStatus = "false";
+
+        if (entityID != PARENT_ENTITY_ID_VALUE) {
+            log:printInfo("Entity ID is equal to the configured parent entity id");
+            parentEntityID = (check responseData.parentEntityUid).toString();
+            responseData = retrieveEntityServiceInformation(entityID);
+            federationStatus = (check responseData.federationStatus).toString();
+
+            log:printInfo("parent entity id : " + parentEntityID);
+            log:printInfo("federation status : " + federationStatus);
+        }
 
         if (responseData is ()) {
             log:printError("Error occurred while fetching entity service info");
         }
 
-        string parentEntityID = (check responseData.parentEntityUid).toString();
-        string federationStatus = (check responseData.federationStatus).toString();
-
-        log:printInfo("parent entity id : " + parentEntityID);
-        log:printInfo("federation status : " + federationStatus);
-
         json payload = {};
 
-        if (emailDomain == VERIFONE_DOMAIN && federationStatus == "false") {
+        if ((emailDomain == VERIFONE_DOMAIN && federationStatus == "false")) {
             log:printInfo("domain matched to verifone domain.");
             payload = {
                 "eventData": {
@@ -125,6 +132,27 @@ service asgardeo:RegistrationService on webhookListener {
 
         } else {
             log:printInfo(" not matching for any condition. UserName: " + userName + "- Entity ID : " + entityID + "- federationStatus : " + federationStatus);
+            payload = {
+                "eventData": {
+                    "source": "welcomeEmail",
+                    "content": {
+                        "FIRST_NAME": firstName,
+                        "URL": "//www.verifone.com/en/us",
+                        "CURRENT_YEAR": extractCurrentYear().toString()
+                    }
+                },
+                "messages": {
+                    "email": [
+                        {
+                            "to": {
+                                "email": userName
+                            }
+                        }
+                    ]
+                }
+            };
+
+            invokeMessagingService(payload);
         }
     }
 
