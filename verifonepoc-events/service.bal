@@ -115,7 +115,7 @@ service asgardeo:RegistrationService on webhookListener {
                     "email": [
                         {
                             "to": {
-                                "email": "mmuserdev@getnada.com"
+                                "email": userName
                             }
                         }
                     ]
