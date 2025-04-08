@@ -32,7 +32,7 @@ configurable string CLIENT_SECRET_CC_GRANT_MESSAGING_SERVICE = "";
 configurable string SCOPES_CC_GRANT_MESSAGING_SERVICE = "";
 configurable string FIRST_NAME_CLAIM = "http://wso2.org/claims/givenname";
 configurable string LAST_NAME_CLAIM = "http://wso2.org/claims/lastname";
-configurable string PARENT_ENTITY_ID_VALUE = "";
+configurable string PARENT_ENTITY_ID_VALUE = "76e84daa-c954-4c6a-8f7f-09758c078669";
 
 service asgardeo:RegistrationService on webhookListener {
 
@@ -356,7 +356,8 @@ function invokeMessagingService(json payload) {
         if (accessToken is string) {
             map<string> headers = {
                 "content-type": "application/json",
-                "Authorization": "Bearer " + (accessToken).toString()
+                "Authorization": "Bearer " + (accessToken).toString(),
+                "Accept":"*/*"
             };
             http:Response|http:ClientError messagingServiceResponse = httpEndpoint->post(MESSAGING_SERVICE_SUB_PATH, payload, headers);
             if (messagingServiceResponse is http:Response) {
