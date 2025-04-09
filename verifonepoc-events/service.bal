@@ -66,8 +66,8 @@ service asgardeo:RegistrationService on webhookListener {
 
         if (entityID != PARENT_ENTITY_ID_VALUE) {
             log:printInfo("Entity ID is equal to the configured parent entity id");
-            parentEntityID = (check responseData.parentEntityUid).toString();
             responseData = retrieveEntityServiceInformation(entityID);
+            parentEntityID = (check responseData.parentEntityUid).toString();
             federationStatus = (check responseData.federationStatus).toString();
 
             log:printInfo("parent entity id : " + parentEntityID);
