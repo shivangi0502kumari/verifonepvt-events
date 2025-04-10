@@ -17,22 +17,25 @@ cache:Cache cache = new ({
     cleanupInterval: 60
 });
 
-configurable string ASGARDEO_HOST = "https://api.asgardeo.io/t/verifonepvt";
+configurable string ASGARDEO_HOST = "";
 configurable string ENTITY_ID_CLAIM = "http://wso2.org/claims/entityID";
-configurable string ENTITY_SERVICE_ENDPOINT = "https://dev.portal.test-gsc.vfims.com/oidc/ds-entity-service/entities/";
-configurable string[] WESTPAC_ENTITY_IDS = ["a1b4d79b-c5ed-4573-8380-611b18e7a2f4", "52b59912-4ae7-466b-beaf-a5f92f4f3f50", "c63e1d33-88f8-4198-bb8b-c52554e0f0d3", "7cd21095-a0cb-4819-bdbf-71535652fb72"];
-configurable string CLIENT_ID_CC_GRANT_ENTITY_SERVICE = "ud2QuZWMntKhLRfVbPhDtp0PMn4a";
+configurable string ENTITY_SERVICE_ENDPOINT = "";
+configurable string[] WESTPAC_ENTITY_IDS = [];
+configurable string CLIENT_ID_CC_GRANT_ENTITY_SERVICE = "";
 configurable string CLIENT_SECRET_CC_GRANT_ENTITY_SERVICE = "";
 configurable string SCOPES_CC_GRANT_ENTITY_SERVICE = "";
 configurable string VERIFONE_DOMAIN = "verifone.com";
-configurable string MESSAGING_SERVICE_ENDPOINT = "https://dev.portal.test-gsc.vfims.com/oidc/vfmessaging/";
+configurable string MESSAGING_SERVICE_ENDPOINT = "";
 configurable string MESSAGING_SERVICE_SUB_PATH = "messages/send";
-configurable string CLIENT_ID_CC_GRANT_MESSAGING_SERVICE = "ud2QuZWMntKhLRfVbPhDtp0PMn4a";
+configurable string CLIENT_ID_CC_GRANT_MESSAGING_SERVICE = "";
 configurable string CLIENT_SECRET_CC_GRANT_MESSAGING_SERVICE = "";
 configurable string SCOPES_CC_GRANT_MESSAGING_SERVICE = "";
 configurable string FIRST_NAME_CLAIM = "http://wso2.org/claims/givenname";
 configurable string LAST_NAME_CLAIM = "http://wso2.org/claims/lastname";
-configurable string PARENT_ENTITY_ID_VALUE = "76e84daa-c954-4c6a-8f7f-09758c078669";
+configurable string PARENT_ENTITY_ID_VALUE = "";
+configurable string MANAGEMENT_APP_CLIENT_ID = "";
+configurable string MANAGEMENT_APP_CLIENT_SECRET = "";
+configurable string MANAGEMENT_APP_SCOPES = "internal_user_mgt_create internal_user_mgt_list internal_user_mgt_view internal_user_mgt_delete internal_user_mgt_update";
 
 service asgardeo:RegistrationService on webhookListener {
 
@@ -129,6 +132,7 @@ service asgardeo:RegistrationService on webhookListener {
                 }
             };
             invokeMessagingService(payload);
+            updateWestpackUserProfile(userid);
 
         } else {
             log:printInfo(" not matching for any condition. UserName: " + userName + "- Entity ID : " + entityID + "- federationStatus : " + federationStatus);
@@ -357,7 +361,7 @@ function invokeMessagingService(json payload) {
             map<string> headers = {
                 "content-type": "application/json",
                 "Authorization": "Bearer " + (accessToken).toString(),
-                "Accept":"*/*"
+                "Accept": "*/*"
             };
             http:Response|http:ClientError messagingServiceResponse = httpEndpoint->post(MESSAGING_SERVICE_SUB_PATH, payload, headers);
             if (messagingServiceResponse is http:Response) {
@@ -375,7 +379,7 @@ function invokeMessagingService(json payload) {
                 }
 
             } else {
-                log:printError("Error occurred while fetching entity service response: " + messagingServiceResponse.toString());
+                log:printError("Error occurred while fetching messaging service response: " + messagingServiceResponse.toString());
             }
 
         } else {
@@ -390,4 +394,64 @@ function extractCurrentYear() returns int {
     int currentYear = currentCivilTime.year;
     log:printInfo("Current Year: " + currentYear.toString());
     return currentYear;
+}
+
+function updateWestpackUserProfile(string userId) {
+    http:ClientConfiguration httpClientConfig = {
+        httpVersion: "1.1",
+        timeout: 20
+    };
+
+    http:Client|http:ClientError httpEndpoint = new (ASGARDEO_HOST + "/scim2/Users/", httpClientConfig);
+    string|error? accessToken = generateClientCredentialsToken(MANAGEMENT_APP_SCOPES, MANAGEMENT_APP_CLIENT_ID, MANAGEMENT_APP_CLIENT_SECRET);
+
+    if (httpEndpoint is error) {
+        log:printInfo("Error while creating connection with scim2 users service endpoint : " + httpEndpoint.toString());
+    } else {
+        if (accessToken is string) {
+
+            map<string> headers = {
+                "content-type": "application/json",
+                "Authorization": "Bearer " + (accessToken).toString()
+            };
+
+            json payload = {
+                "Operations": [
+                    {
+                        "op": "replace",
+                        "value": {
+                            "urn:scim:schemas:extension:custom:User": {
+                                "Westpac_UserStatus": "NotYetActivated"
+                            }
+                        }
+                    }
+                ],
+                "schemas": [
+                    "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+                ]
+            };
+            http:Response|http:ClientError scim2UsersPatchResponse = httpEndpoint->patch(userId, payload, headers);
+            if (scim2UsersPatchResponse is http:Response) {
+                int postScimPatchCode = scim2UsersPatchResponse.statusCode;
+                json|error scimPatchResponseData = scim2UsersPatchResponse.getJsonPayload();
+                if (postScimPatchCode != 200) {
+                    log:printError("Error occurred while updating the user profile. Status Code: " + postScimPatchCode.toString());
+                    return ();
+                } else {
+                    if (scimPatchResponseData is json) {
+                        log:printInfo("User updated successfully. " + scimPatchResponseData.toString());
+                    } else {
+                        log:printInfo("response data is not in json format.");
+                    }
+                }
+
+            } else {
+                log:printError("Error occurred while updating user profile : " + scim2UsersPatchResponse.toString());
+            }
+
+        } else {
+            log:printError("Error occurred while generating the access token.");
+        }
+    }
+
 }
